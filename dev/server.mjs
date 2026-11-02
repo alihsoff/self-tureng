@@ -18,6 +18,21 @@ http
   .createServer((req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
 
+    if (url.pathname === '/proxy' && url.searchParams.get('kind') === 'audio') {
+      const p = url.searchParams.get('path') || '';
+      if (!/^[a-z]{2}-[A-Z]{2}\/[0-9a-f]{2}\/[0-9a-f-]{36}\.mp3$/.test(p)) {
+        res.writeHead(400).end();
+        return;
+      }
+      fetch(`https://voicesr2.tureng.com/files/${p}`)
+        .then(async (up) => {
+          res.writeHead(up.ok ? 200 : 502, { 'Content-Type': 'audio/mpeg', 'Access-Control-Allow-Origin': '*' });
+          res.end(Buffer.from(await up.arrayBuffer()));
+        })
+        .catch(() => res.writeHead(502).end());
+      return;
+    }
+
     if (url.pathname === '/proxy') {
       const pair = (url.searchParams.get('pair') || '').replace(/[^a-z]/g, '');
       const q = (url.searchParams.get('q') || '').trim().toLowerCase();

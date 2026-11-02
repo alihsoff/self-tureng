@@ -1,42 +1,86 @@
 // Pronunciation: Tureng's recorded MP3s when available, otherwise the device's speech synthesis (works offline on iOS).
+//
+// Recorded clips are played through Web Audio, not an <audio> element: iOS shows a "Now Playing" player on
+// the lock screen for media elements (and keeps it there even after the clip is unloaded), but not for
+// Web Audio sound effects. The MP3 bytes come through our proxy because Tureng's audio host sends no CORS headers.
 import { LANGS } from './config.js';
 
-let audioEl = null;
-
-// Pronunciation clips are short "transient" sounds, not media: on Safari 17+ this keeps them out of the
-// lock-screen "Now Playing" player and only briefly ducks the user's music instead of stopping it.
+// Short "transient" sounds (Safari 17+): duck the user's music briefly instead of stopping it.
 try {
   if (navigator.audioSession) navigator.audioSession.type = 'transient';
 } catch { /* not supported */ }
 
-// Unloading the element ends iOS's media session, which removes any lock-screen player that did appear.
-function releaseAudio() {
-  if (!audioEl || !audioEl.getAttribute('src')) return;
-  audioEl.removeAttribute('src');
-  audioEl.load();
-  if ('mediaSession' in navigator) {
-    try {
-      navigator.mediaSession.metadata = null;
-      navigator.mediaSession.playbackState = 'none';
-    } catch { /* ignore */ }
+let ctx = null;
+let current = null;
+const buffers = new Map(); // url -> Promise<AudioBuffer>
+
+/** Creates/resumes the AudioContext. Call synchronously inside a tap so iOS unlocks audio. */
+function audioContext() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  if (!ctx) {
+    ctx = new AC();
+    // Playing a silent buffer inside the first gesture unlocks output on older iOS versions.
+    const silent = ctx.createBuffer(1, 1, 22050);
+    const s = ctx.createBufferSource();
+    s.buffer = silent;
+    s.connect(ctx.destination);
+    s.start(0);
   }
+  if (ctx.state === 'suspended' || ctx.state === 'interrupted') ctx.resume().catch(() => {});
+  return ctx;
 }
 
-export function playUrl(src) {
-  // A single reused element: iOS only allows playback started from a user gesture, and reuse keeps that "unlocked".
-  if (!audioEl) {
-    audioEl = new Audio();
-    audioEl.preload = 'auto';
-    audioEl.addEventListener('ended', releaseAudio);
-    audioEl.addEventListener('error', releaseAudio);
+function decode(ac, data) {
+  // Callback form for older Safari, which doesn't return a promise.
+  return new Promise((resolve, reject) => ac.decodeAudioData(data, resolve, reject));
+}
+
+function loadBuffer(ac, url) {
+  let p = buffers.get(url);
+  if (!p) {
+    p = fetch(url)
+      .then((r) => {
+        if (!r.ok) throw new Error(`audio_http_${r.status}`);
+        return r.arrayBuffer();
+      })
+      .then((data) => decode(ac, data));
+    buffers.set(url, p);
+    p.catch(() => buffers.delete(url));
+  }
+  return p;
+}
+
+function stopAll() {
+  if (current) {
+    try { current.stop(); } catch { /* already stopped */ }
+    current = null;
   }
   if ('speechSynthesis' in window) speechSynthesis.cancel();
-  audioEl.pause();
-  audioEl.src = src;
-  return audioEl.play().catch((e) => {
-    releaseAudio();
-    throw e;
-  });
+}
+
+/** Fetches and decodes clips ahead of time (no gesture needed), so the first tap plays instantly. */
+export function preloadAudio(urls) {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC || !urls.length) return;
+  if (!ctx) {
+    try { ctx = new AC(); } catch { return; } // starts suspended; resumed on the first tap
+  }
+  urls.forEach((u) => loadBuffer(ctx, u).catch(() => {}));
+}
+
+export async function playUrl(url) {
+  const ac = audioContext(); // must stay before any await
+  if (!ac) throw new Error('no_webaudio');
+  stopAll();
+  const buffer = await loadBuffer(ac, url);
+  if (ac.state !== 'running') await ac.resume();
+  const source = ac.createBufferSource();
+  source.buffer = buffer;
+  source.connect(ac.destination);
+  source.onended = () => { if (current === source) current = null; };
+  current = source;
+  source.start(0);
 }
 
 export const ttsSupported = () => 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
@@ -56,11 +100,7 @@ function pickVoice(tag) {
 export function speak(text, tag) {
   if (!ttsSupported() || !text) return false;
   const locale = tag.length === 2 ? LANGS[tag]?.tts || tag : tag;
-  if (audioEl) {
-    audioEl.pause();
-    releaseAudio();
-  }
-  speechSynthesis.cancel();
+  stopAll();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = locale;
   const voice = pickVoice(locale);
@@ -70,14 +110,14 @@ export function speak(text, tag) {
   return true;
 }
 
-/** Plays a recorded file, falling back to TTS if the file can't be played (offline, blocked, ...). */
-export async function pronounce({ src, text, locale }) {
-  if (src) {
+/** Plays a recorded clip (`url` = proxied MP3), falling back to TTS if it can't be played (offline, blocked, ...). */
+export async function pronounce({ url, text, locale }) {
+  if (url) {
     try {
-      await playUrl(src);
+      await playUrl(url);
       return;
-    } catch {
-      /* fall through to TTS */
+    } catch (e) {
+      console.warn('[audio]', e);
     }
   }
   speak(text, locale);

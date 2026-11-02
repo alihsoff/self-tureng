@@ -1,7 +1,7 @@
 import { PAIRS, DEFAULT_PAIR, LANGS, ACCENTS, APP_VERSION, pairUrl } from './config.js';
-import { lookup, suggest, proxyUrl, testProxy, moreSentences } from './api.js';
+import { lookup, suggest, proxyUrl, testProxy, moreSentences, audioUrl } from './api.js';
 import { settings, history as hist, favorites, cache } from './store.js';
-import { pronounce, speak } from './speech.js';
+import { pronounce, speak, preloadAudio } from './speech.js';
 
 // ---------------------------------------------------------------- helpers
 const $ = (sel) => document.querySelector(sel);
@@ -307,7 +307,8 @@ function pronButtons(result) {
   if (result.audio.length) {
     // Preferred English accent first.
     const audio = [...result.audio].sort((a, b) => (b.locale === accent) - (a.locale === accent));
-    buttons = audio.map((a) => ({ src: a.src, locale: a.locale }));
+    buttons = audio.map((a) => ({ url: audioUrl(a.src), locale: a.locale }));
+    preloadAudio(buttons.map((b) => b.url).filter(Boolean));
   } else if (termLang === 'en') {
     buttons = ['en-US', 'en-GB'].map((locale) => ({ locale }));
   } else {
@@ -538,7 +539,7 @@ const actions = {
     const b = state.pron?.[+el.dataset.k];
     if (!b) return;
     flash(el);
-    pronounce({ src: b.src, text: state.result?.term || state.q, locale: b.locale });
+    pronounce({ url: b.url, text: state.result?.term || state.q, locale: b.locale });
   },
   star: (el) => {
     const first = state.result?.sections[0]?.groups[0]?.items[0];

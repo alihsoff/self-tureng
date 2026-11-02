@@ -2,6 +2,7 @@
 // Cloudflare Worker (worker/src/site.js, worker/src/index.js), Cloudflare Pages (functions/proxy.js), Vercel (api/proxy.js).
 // GET ?pair=entr&q=hello  ->  results column of https://tureng.com/en/turkish-english/hello as HTML.
 // GET ?pair=entr&q=hello&kind=sentences  ->  https://tureng.com/en/turkish-english-sentences/hello
+// GET ?kind=audio&path=en-US/xx/<uuid>.mp3  ->  https://voicesr2.tureng.com/files/en-US/xx/<uuid>.mp3
 // It only forwards requests for the four dictionary pages; it is not an open proxy.
 
 const PAIRS = {
@@ -44,6 +45,33 @@ function slim(html) {
     .replace(/<iframe[\s\S]*?<\/iframe>/gi, '');
 }
 
+// Tureng pronunciation files, e.g. path=en-US/d5/d5c81016-4ad2-40b3-8768-5886451afe0a.mp3.
+// Served with CORS so the app can play them through Web Audio (which, unlike <audio>, doesn't put a
+// "Now Playing" player on the iOS lock screen). Only this exact file pattern is allowed.
+const AUDIO_PATH = /^[a-z]{2}-[A-Z]{2}\/[0-9a-f]{2}\/[0-9a-f-]{36}\.mp3$/;
+const AUDIO_CACHE_SECONDS = 60 * 60 * 24 * 30;
+
+async function proxyAudio(url, cors, ctx) {
+  const path = url.searchParams.get('path') || '';
+  if (!AUDIO_PATH.test(path)) return json(400, { error: 'bad_request' }, cors.headers);
+  const cache = globalThis.caches?.default;
+  const cacheKey = new Request(`https://tureng-proxy.cache/audio/${path}`);
+  const hit = cache ? await cache.match(cacheKey) : null;
+  let res = hit;
+  if (!res) {
+    const upstream = await fetch(`https://voicesr2.tureng.com/files/${path}`);
+    if (!upstream.ok) return json(502, { error: 'upstream_unavailable', status: upstream.status }, cors.headers);
+    res = new Response(await upstream.arrayBuffer(), {
+      headers: { 'Content-Type': 'audio/mpeg', 'Cache-Control': `public, max-age=${AUDIO_CACHE_SECONDS}, s-maxage=${AUDIO_CACHE_SECONDS}` },
+    });
+    if (cache) ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  }
+  res = new Response(res.body, res);
+  Object.entries(cors.headers).forEach(([k, v]) => res.headers.set(k, v));
+  res.headers.set('X-Cache', hit ? 'HIT' : 'MISS');
+  return res;
+}
+
 export async function handleProxy(request, env = {}, ctx = { waitUntil() {} }) {
   const cors = corsHeaders(request, env);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors.headers });
@@ -51,6 +79,7 @@ export async function handleProxy(request, env = {}, ctx = { waitUntil() {} }) {
   if (!cors.allowed) return json(403, { error: 'origin_not_allowed' }, cors.headers);
 
   const url = new URL(request.url);
+  if (url.searchParams.get('kind') === 'audio') return proxyAudio(url, cors, ctx);
   const pair = url.searchParams.get('pair') || 'entr';
   const q = (url.searchParams.get('q') || '').trim();
   // kind=sentences -> Tureng's "More Sentences" page, which only exists for EN-TR.

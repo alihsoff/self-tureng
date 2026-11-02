@@ -66,6 +66,17 @@ export async function moreSentences(term, pair, { signal } = {}) {
   return result;
 }
 
+/** Proxied URL for a Tureng audio file (adds the CORS headers Web Audio needs), or null without a proxy. */
+export function audioUrl(src) {
+  const path = (src.match(/\/files\/([a-z]{2}-[A-Z]{2}\/[0-9a-f]{2}\/[0-9a-f-]{36}\.mp3)$/) || [])[1];
+  const proxy = proxyUrl();
+  if (!path || !proxy) return null;
+  const url = new URL(proxy, location.href);
+  url.searchParams.set('kind', 'audio');
+  url.searchParams.set('path', path);
+  return url.href;
+}
+
 let acController = null;
 /** Tureng's autocomplete endpoint is public and CORS-enabled. */
 export async function suggest(text, pair) {
