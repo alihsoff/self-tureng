@@ -26,6 +26,22 @@
       var t = (JSON.parse(localStorage.getItem('tm.settings.v1') || '{}').theme) || 'auto';
       if (t !== 'auto') document.documentElement.dataset.theme = t;
     } catch (e) {}
+    // Home-screen app: iOS can report a viewport shorter than the screen by the status bar height,
+    // so size the app shell to the full screen instead (see body in app.css).
+    (function () {
+      var standalone = navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+      if (!standalone) return;
+      function fit() {
+        var h = window.innerHeight;
+        var portrait = h >= window.innerWidth;
+        var full = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+        if (full > h && full - h <= 100) h = full;
+        document.documentElement.style.setProperty('--app-h', h + 'px');
+      }
+      fit();
+      window.addEventListener('resize', fit);
+      window.addEventListener('orientationchange', function () { setTimeout(fit, 300); });
+    })();
   </script>
 </head>
 <body>
