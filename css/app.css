@@ -59,15 +59,13 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 html, body { margin: 0; background: var(--bg); color: var(--text); }
-/* App shell: the document itself never scrolls or rubber-bands; only the content area (#view) and sheets scroll.
-   This keeps the app bar fixed in place like a native app. */
-html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+/* The page scrolls naturally (so it always fills the screen, whatever the device), with no rubber-band
+   bounce: overscroll-behavior on the root (iOS 16+), plus a touch guard in app.js for the edges. */
+html { overscroll-behavior: none; }
 body {
   font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  /* --app-h is set in index.html for home-screen mode, where iOS reports a viewport that is short by the
-     status-bar height (leaving a black strip at the bottom); in the browser, 100% is right. */
-  position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100%);
-  display: flex; flex-direction: column;
+  min-height: 100dvh;
+  overscroll-behavior: none;
 }
 /* Native-feeling chrome: no text selection or long-press callout on controls */
 .appbar, button, .grab-zone { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
@@ -78,7 +76,7 @@ a { color: var(--accent); }
 
 /* ---------- App bar ---------- */
 .appbar {
-  position: relative; z-index: 20; flex: none;
+  position: sticky; top: 0; z-index: 20;
   background: linear-gradient(180deg, var(--brand), var(--brand-2));
   color: var(--brand-ink);
   padding: calc(var(--safe-top) + 8px) calc(var(--safe-right) + 12px) 0 calc(var(--safe-left) + 12px);
@@ -136,9 +134,9 @@ button, a, input { touch-action: manipulation; }
 
 /* ---------- Autocomplete ---------- */
 .suggest {
-  position: absolute; z-index: 30; left: 0; right: 0;
+  position: fixed; z-index: 30; left: 0; right: 0;
   background: var(--surface); border-bottom: 1px solid var(--line);
-  max-height: 60%; overflow-y: auto; box-shadow: 0 12px 24px rgba(0, 0, 0, .12);
+  max-height: 60dvh; overflow-y: auto; box-shadow: 0 12px 24px rgba(0, 0, 0, .12);
   padding-left: var(--safe-left); padding-right: var(--safe-right);
 }
 .suggest button {
@@ -152,11 +150,8 @@ button, a, input { touch-action: manipulation; }
 
 /* ---------- Main view ---------- */
 .view {
-  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
-  -webkit-overflow-scrolling: touch; overscroll-behavior: none;
-  /* Full-width scroller (scrollbar at the screen edge) with content capped at 760px */
-  padding: 12px max(calc(var(--safe-right) + 12px), calc((100% - 736px) / 2)) calc(var(--safe-bottom) + 32px) max(calc(var(--safe-left) + 12px), calc((100% - 736px) / 2));
-  outline: none;
+  padding: 12px calc(var(--safe-right) + 12px) calc(var(--safe-bottom) + 32px) calc(var(--safe-left) + 12px);
+  max-width: 760px; margin: 0 auto; outline: none;
 }
 .card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); }
 .section-title {
@@ -221,7 +216,7 @@ button, a, input { touch-action: manipulation; }
   border-bottom: 1px solid var(--line);
 }
 .cat {
-  position: sticky; top: -12px; z-index: 2; /* -12px: sits flush under the app bar despite the view's top padding */
+  position: sticky; top: var(--appbar-h, 108px); z-index: 2;
   margin: 0; padding: 8px 16px; font-size: 13px; font-weight: 600; color: var(--accent);
   background: var(--surface-2); border-bottom: 1px solid var(--line);
 }
@@ -303,9 +298,9 @@ button, a, input { touch-action: manipulation; }
 @keyframes sk { to { background-position: -200% 0; } }
 
 /* ---------- Bottom sheet ---------- */
-.scrim { position: absolute; inset: 0; z-index: 40; background: rgba(0, 0, 0, .35); animation: fade .15s; transition: opacity .22s; }
+.scrim { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .35); animation: fade .15s; transition: opacity .22s; }
 .sheet {
-  position: absolute; z-index: 41; left: 0; right: 0; bottom: 0; max-height: 88%; overflow-y: auto;
+  position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; max-height: 88dvh; overflow-y: auto;
   overscroll-behavior: none; -webkit-overflow-scrolling: touch; will-change: transform;
   background: var(--bg); border-radius: 18px 18px 0 0;
   padding: 8px calc(var(--safe-right) + 16px) calc(var(--safe-bottom) + 16px) calc(var(--safe-left) + 16px);
@@ -344,7 +339,7 @@ button, a, input { touch-action: manipulation; }
 
 /* ---------- Toast ---------- */
 .toast {
-  position: absolute; z-index: 60; left: 50%; bottom: calc(var(--safe-bottom) + 24px);
+  position: fixed; z-index: 60; left: 50%; bottom: calc(var(--safe-bottom) + 24px);
   transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
   background: rgba(30, 30, 30, .92); color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px;
   transition: opacity .2s, transform .2s; max-width: calc(100% - 32px);

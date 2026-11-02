@@ -68,9 +68,9 @@ function navigate(q, pair = state.pair, { replace = false } = {}) {
 function goHome() {
   if (state.q) {
     navigate('');
-    els.view.scrollTo(0, 0);
+    window.scrollTo(0, 0);
   } else {
-    els.view.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     els.input.focus(); // inside the tap handler, so iOS opens the keyboard
   }
 }
@@ -159,7 +159,7 @@ async function search(q, pair) {
   state.controller?.abort();
   const controller = (state.controller = new AbortController());
   renderLoading(q);
-  els.view.scrollTo(0, 0);
+  window.scrollTo(0, 0);
   try {
     const result = await lookup(q, pair, { signal: controller.signal });
     if (controller.signal.aborted) return;
@@ -510,15 +510,32 @@ function closeSheet() {
   sheet.addEventListener('touchcancel', end);
 }
 
-// The document never moves: block drags that don't start inside a scrollable area (app bar, scrim, ...),
-// and drags on a scroll area that has nothing to scroll, so iOS can't rubber-band the whole page.
-document.addEventListener('touchmove', (e) => {
-  if (e.touches.length !== 1 || e.target.closest?.('input, textarea')) return;
-  const area = e.target.closest?.('.view, .sheet, .suggest, .pairs');
-  if (!area) return e.preventDefault();
-  if (area.classList.contains('pairs')) return; // horizontal chip scroller
-  if (area.scrollHeight <= area.clientHeight) e.preventDefault();
-}, { passive: false });
+// No rubber-banding: block drags that would pull the page past its top or bottom edge, drags behind an
+// open sheet, and drags on overlays that have nothing to scroll. Measures scroll positions, not screen sizes.
+{
+  let lastX = 0, lastY = 0;
+  document.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) { lastX = e.touches[0].clientX; lastY = e.touches[0].clientY; }
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 1) return;
+    const { clientX: x, clientY: y } = e.touches[0];
+    const dx = x - lastX, dy = y - lastY;
+    lastX = x; lastY = y;
+    if (e.defaultPrevented || e.target.closest?.('input, textarea')) return;
+    const overlay = e.target.closest?.('.sheet, .suggest');
+    if (!els.sheet.hidden && !e.target.closest?.('.sheet')) return e.preventDefault();
+    if (overlay) {
+      if (overlay.scrollHeight <= overlay.clientHeight) e.preventDefault();
+      return; // their own edges: overscroll-behavior in CSS
+    }
+    if (e.target.closest?.('.pairs') && Math.abs(dx) > Math.abs(dy)) return; // horizontal chip scroller
+    const se = document.scrollingElement || document.documentElement;
+    const atTop = se.scrollTop <= 0;
+    const atBottom = se.scrollTop + window.innerHeight >= se.scrollHeight - 1;
+    if ((dy > 0 && atTop) || (dy < 0 && atBottom)) e.preventDefault();
+  }, { passive: false });
+}
 // No pinch-zoom of the app chrome (iOS Safari ignores user-scalable=no).
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 
