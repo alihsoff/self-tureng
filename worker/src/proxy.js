@@ -1,6 +1,7 @@
 // Minimal CORS proxy for Tureng Mobile, shared by every deploy target:
 // Cloudflare Worker (worker/src/site.js, worker/src/index.js), Cloudflare Pages (functions/proxy.js), Vercel (api/proxy.js).
 // GET ?pair=entr&q=hello  ->  results column of https://tureng.com/en/turkish-english/hello as HTML.
+// GET ?pair=entr&q=hello&kind=sentences  ->  https://tureng.com/en/turkish-english-sentences/hello
 // It only forwards requests for the four dictionary pages; it is not an open proxy.
 
 const PAIRS = {
@@ -52,11 +53,15 @@ export async function handleProxy(request, env = {}, ctx = { waitUntil() {} }) {
   const url = new URL(request.url);
   const pair = url.searchParams.get('pair') || 'entr';
   const q = (url.searchParams.get('q') || '').trim();
+  // kind=sentences -> Tureng's "More Sentences" page, which only exists for EN-TR.
+  const kind = url.searchParams.get('kind') || 'terms';
   if (!PAIRS[pair] || !q || q.length > 120) return json(400, { error: 'bad_request' }, cors.headers);
+  if (kind !== 'terms' && !(kind === 'sentences' && pair === 'entr')) return json(400, { error: 'bad_request' }, cors.headers);
+  const path = `/en/${PAIRS[pair]}${kind === 'sentences' ? '-sentences' : ''}/${encodeURIComponent(q)}`;
 
   // Cloudflare has an edge cache API; elsewhere (Vercel) the CDN caches via the s-maxage header below.
   const cache = globalThis.caches?.default;
-  const cacheKey = new Request(`https://tureng-proxy.cache/${pair}/${encodeURIComponent(q.toLowerCase())}`);
+  const cacheKey = new Request(`https://tureng-proxy.cache/${kind}/${pair}/${encodeURIComponent(q.toLowerCase())}`);
   const hit = cache ? await cache.match(cacheKey) : null;
   if (hit) {
     const res = new Response(hit.body, hit);
@@ -65,7 +70,7 @@ export async function handleProxy(request, env = {}, ctx = { waitUntil() {} }) {
     return res;
   }
 
-  const upstream = await fetch(`https://tureng.com/en/${PAIRS[pair]}/${encodeURIComponent(q)}`, {
+  const upstream = await fetch(`https://tureng.com${path}`, {
     headers: {
       Accept: 'text/html',
       'Accept-Language': 'en-US,en;q=0.9',
