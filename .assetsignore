@@ -1,0 +1,13 @@
+# Files that must not be published as static assets (see wrangler.jsonc).
+.git
+.wrangler
+node_modules
+worker
+functions
+dev
+wrangler.jsonc
+package.json
+package-lock.json
+README.md
+.gitignore
+.assetsignore

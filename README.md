@@ -39,17 +39,24 @@ Locally, `/proxy` is a mock backed by `dev/fixtures/<pair>/<term>.html`. Fixture
 
 ## Deploy
 
-### Option A — Cloudflare Pages (recommended: app + proxy on one domain, free)
+### Option A — Cloudflare Workers (recommended: app + proxy on one domain, free)
 
 1. Go to [dash.cloudflare.com](https://dash.cloudflare.com).
-2. Open **Workers & Pages → Create → Pages → Connect to Git** and pick this repository.
-3. Fill in the build settings:
-   - **Framework preset:** None
+2. Open **Workers & Pages → Create → Import a repository** and pick this repository.
+3. Fill in the settings:
+   - **Project name:** `self-tureng`. It must match `name` in `wrangler.jsonc`.
    - **Build command:** *(leave empty)*
-   - **Build output directory:** `/`
-4. Click **Save and Deploy**. The app runs at `https://<project>.pages.dev`.
+   - **Deploy command:** `npx wrangler deploy`
+4. Click **Deploy**. The app runs at `https://self-tureng.<account>.workers.dev`.
 
-`functions/proxy.js` is deployed automatically and serves `/proxy` on the same domain, so no proxy URL or CORS setup is needed. Every `git push` to `main` redeploys.
+`wrangler.jsonc` publishes the static files and routes `/proxy` to `worker/src/proxy.js`. `.assetsignore` keeps repository-only files from being published. Every `git push` to `main` redeploys.
+
+Using Cloudflare **Pages** instead also works:
+- Framework preset: None
+- Build command: *(leave empty)*
+- Output directory: `/`
+
+In that case `functions/proxy.js` serves `/proxy`.
 
 ### Option B — GitHub Pages + a separate Worker
 
@@ -94,7 +101,8 @@ js/config.js            Dictionaries, URLs, proxy URL
 sw.js                   Service worker (offline app shell)
 manifest.webmanifest    PWA manifest
 icons/                  App icons (regenerate with `npm run icons`)
-worker/                 Proxy logic (src/proxy.js) + standalone Worker entry
+wrangler.jsonc          Cloudflare Workers deploy config (static assets + /proxy)
+worker/                 Proxy logic (src/proxy.js), site entry (src/site.js), standalone Worker
 functions/proxy.js      Same proxy as a Cloudflare Pages Function (/proxy)
 dev/                    Local dev server, fixtures, icon generator
 ```

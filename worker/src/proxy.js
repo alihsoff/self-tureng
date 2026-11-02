@@ -30,14 +30,14 @@ const json = (status, body, headers) =>
   new Response(JSON.stringify(body), { status, headers: { ...headers, 'Content-Type': 'application/json' } });
 
 // Keep only the results column and drop scripts: smaller payload for phones, nothing executable.
+// Match the actual <div class="..."> tags; the class names also appear earlier in the page's CSS.
 function slim(html) {
-  const marker = html.indexOf('tureng-searchresults-col-left');
-  if (marker < 0) return null;
-  const start = html.lastIndexOf('<div', marker);
-  const rightMarker = html.indexOf('tureng-searchresults-col-right', marker);
-  const end = rightMarker > 0 ? html.lastIndexOf('<div', rightMarker) : html.length;
+  const left = /<div\b[^>]*class="[^"]*\btureng-searchresults-col-left\b[^"]*"/i.exec(html);
+  if (!left) return null;
+  const right = /<div\b[^>]*class="[^"]*\btureng-searchresults-col-right\b[^"]*"/i.exec(html.slice(left.index));
+  const end = right ? left.index + right.index : html.length;
   return html
-    .slice(start, end)
+    .slice(left.index, end)
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<iframe[\s\S]*?<\/iframe>/gi, '');
@@ -74,7 +74,7 @@ export async function handleProxy(request, env = {}, ctx = { waitUntil() {} }) {
   });
   const body = await upstream.text();
   const html = upstream.ok ? slim(body) : null;
-  if (!html) {
+  if (!html || html.length < 200) {
     // Typically a Cloudflare challenge page (403) from tureng.com: the app then falls back to Wiktionary.
     return json(502, { error: 'upstream_unavailable', status: upstream.status }, cors.headers);
   }

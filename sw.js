@@ -1,9 +1,8 @@
 // Service worker: makes the app shell load instantly and work offline.
 // Bump VERSION whenever shell files change so clients pick up the new build.
-const VERSION = 'tm-v1.0.0';
+const VERSION = 'tm-v1.0.1';
 const SHELL = [
   './',
-  'index.html',
   'css/app.css',
   'js/app.js',
   'js/api.js',
@@ -38,14 +37,15 @@ self.addEventListener('fetch', (event) => {
 
   if (req.mode === 'navigate') {
     // Network first for the page so updates arrive quickly; cached shell when offline.
+    // The shell is cached under './' (hosts may redirect /index.html -> /, and redirected responses can't serve navigations).
     event.respondWith(
       fetch(req)
         .then((res) => {
           const copy = res.clone();
-          caches.open(VERSION).then((c) => c.put('index.html', copy));
+          caches.open(VERSION).then((c) => c.put('./', copy));
           return res;
         })
-        .catch(() => caches.match('index.html')),
+        .catch(() => caches.match('./')),
     );
     return;
   }

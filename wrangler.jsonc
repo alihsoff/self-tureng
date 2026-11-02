@@ -1,0 +1,15 @@
+// Deploys the app and its Tureng proxy as one Cloudflare Worker: `npx wrangler deploy`.
+// The name must match the Worker/project name chosen in the Cloudflare dashboard.
+{
+  "name": "self-tureng",
+  "main": "worker/src/site.js",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    // Same-origin requests need no CORS; restrict other origins here if you like.
+    "ALLOWED_ORIGINS": "*"
+  }
+}
