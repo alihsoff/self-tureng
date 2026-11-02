@@ -3,16 +3,40 @@ import { LANGS } from './config.js';
 
 let audioEl = null;
 
+// Pronunciation clips are short "transient" sounds, not media: on Safari 17+ this keeps them out of the
+// lock-screen "Now Playing" player and only briefly ducks the user's music instead of stopping it.
+try {
+  if (navigator.audioSession) navigator.audioSession.type = 'transient';
+} catch { /* not supported */ }
+
+// Unloading the element ends iOS's media session, which removes any lock-screen player that did appear.
+function releaseAudio() {
+  if (!audioEl || !audioEl.getAttribute('src')) return;
+  audioEl.removeAttribute('src');
+  audioEl.load();
+  if ('mediaSession' in navigator) {
+    try {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = 'none';
+    } catch { /* ignore */ }
+  }
+}
+
 export function playUrl(src) {
   // A single reused element: iOS only allows playback started from a user gesture, and reuse keeps that "unlocked".
   if (!audioEl) {
     audioEl = new Audio();
     audioEl.preload = 'auto';
+    audioEl.addEventListener('ended', releaseAudio);
+    audioEl.addEventListener('error', releaseAudio);
   }
   if ('speechSynthesis' in window) speechSynthesis.cancel();
   audioEl.pause();
   audioEl.src = src;
-  return audioEl.play();
+  return audioEl.play().catch((e) => {
+    releaseAudio();
+    throw e;
+  });
 }
 
 export const ttsSupported = () => 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
@@ -32,7 +56,10 @@ function pickVoice(tag) {
 export function speak(text, tag) {
   if (!ttsSupported() || !text) return false;
   const locale = tag.length === 2 ? LANGS[tag]?.tts || tag : tag;
-  if (audioEl) audioEl.pause();
+  if (audioEl) {
+    audioEl.pause();
+    releaseAudio();
+  }
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = locale;
