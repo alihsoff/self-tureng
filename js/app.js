@@ -490,9 +490,9 @@ const actions = {
     if (!v) { status.textContent = 'Enter a URL first.'; return; }
     status.textContent = 'Testing…';
     try {
-      status.textContent = (await testProxy(v)) ? '✅ Working — Tureng results are coming through.' : '⚠️ Got a response but no results.';
+      status.textContent = (await testProxy(v)) ? '✅ Tureng answered this request.' : '⚠️ Got a response but no results.';
     } catch (e) {
-      status.textContent = `❌ Not working (${e.message}). Tureng may be blocking the proxy.`;
+      status.textContent = `❌ Tureng blocked this request (${e.message}). Blocked lookups fall back to Wiktionary.`;
     }
   },
   'sheet-say-src': () => { const t = state.sheetItem.src; speak(t.text, ttsLocale(t.lang)); },

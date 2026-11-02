@@ -65,7 +65,9 @@ export async function suggest(text, pair) {
   return Array.isArray(list) ? list.filter((s) => typeof s === 'string') : [];
 }
 
+// Uses a unique nonsense term: it is never in the proxy's cache, so the test really reaches tureng.com
+// (a "Term not found" page parses fine and counts as success).
 export async function testProxy(url) {
-  const r = await turengLookup('hello', 'entr', url);
-  return r.sections.length > 0;
+  await turengLookup(`zzq${Date.now().toString(36)}`, 'entr', url);
+  return true;
 }
