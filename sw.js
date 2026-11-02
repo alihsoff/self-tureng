@@ -1,6 +1,6 @@
 // Service worker: makes the app shell load instantly and work offline.
 // Bump VERSION whenever shell files change so clients pick up the new build.
-const VERSION = 'tm-v1.1.1';
+const VERSION = 'tm-v1.2.0';
 const SHELL = [
   './',
   'css/app.css',

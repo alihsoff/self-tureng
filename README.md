@@ -8,6 +8,7 @@ An ad-free, mobile-first web app (PWA) for the [Tureng](https://tureng.com) dict
   - Tureng's recorded audio (🇺🇸 US / 🇬🇧 UK / 🇦🇺 AU, 🇫🇷 FR / 🇨🇦 CA, 🇪🇸 ES / 🇲🇽 MX)
   - the device's text-to-speech for every other word (works offline on iOS)
 - **No ads:** the app only extracts the dictionary data. Tureng's scripts, ads and trackers are never loaded.
+- **Example sentences (EN⇄TR):** examples under each meaning, with a speaker for the English sentence. A switch hides them. **More example sentences** loads Tureng's full list.
 - **Saved data:** favorites, search history and an offline cache of looked-up words
 - **Settings:** light/dark/auto theme and preferred English accent
 - **Fallback:** if Tureng can't be reached, results come from Wiktionary

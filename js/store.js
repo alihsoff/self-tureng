@@ -1,6 +1,6 @@
 // Per-device persistence (localStorage). Every access is guarded: private mode / quota errors must never break the app.
 
-const KEYS = { settings: 'tm.settings.v1', history: 'tm.history.v1', favorites: 'tm.favorites.v1', cache: 'tm.cache.v1' };
+const KEYS = { settings: 'tm.settings.v1', history: 'tm.history.v1', favorites: 'tm.favorites.v1', cache: 'tm.cache.v2' };
 const HISTORY_MAX = 60;
 const CACHE_MAX = 40;
 
@@ -23,7 +23,7 @@ function write(key, value) {
 }
 
 // ---- settings
-const DEFAULT_SETTINGS = { proxyUrl: null, pair: 'entr', accent: 'en-US', theme: 'auto' };
+const DEFAULT_SETTINGS = { proxyUrl: null, pair: 'entr', accent: 'en-US', theme: 'auto', showExamples: true };
 export const settings = {
   get() {
     return { ...DEFAULT_SETTINGS, ...read(KEYS.settings, {}) };

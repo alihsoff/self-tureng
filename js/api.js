@@ -1,6 +1,6 @@
 // Data layer: cache -> Tureng (via proxy) -> Wiktionary fallback.
 import { AUTOCOMPLETE_URL, DEFAULT_PROXY_URL, SAME_ORIGIN_PROXY } from './config.js';
-import { turengLookup } from './tureng.js';
+import { turengLookup, turengSentences } from './tureng.js';
 import { wiktionaryLookup } from './wiktionary.js';
 import { cache, settings } from './store.js';
 
@@ -52,6 +52,18 @@ export async function lookup(term, pair, { signal, fresh = false } = {}) {
     if (cached) return { ...cached, notice: 'offline_cache' };
     throw error || e;
   }
+}
+
+/** Tureng's full example-sentence list for a term (EN-TR only), cached per device like lookups. */
+export async function moreSentences(term, pair, { signal } = {}) {
+  const cacheSlot = `sentences-${pair}`;
+  const cached = cache.get(term, cacheSlot);
+  if (cached) return cached;
+  const proxy = proxyUrl();
+  if (!proxy) throw new Error('no_proxy');
+  const result = await turengSentences(term, pair, proxy, signal);
+  if (result.count) cache.set(term, cacheSlot, result);
+  return result;
 }
 
 let acController = null;

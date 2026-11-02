@@ -1,5 +1,5 @@
 import { PAIRS, DEFAULT_PAIR, LANGS, ACCENTS, APP_VERSION, pairUrl } from './config.js';
-import { lookup, suggest, proxyUrl, testProxy } from './api.js';
+import { lookup, suggest, proxyUrl, testProxy, moreSentences } from './api.js';
 import { settings, history as hist, favorites, cache } from './store.js';
 import { pronounce, speak } from './speech.js';
 
@@ -15,6 +15,7 @@ const ICON = {
   x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>',
   info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>',
   copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>',
+  quote: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h4v4c0 3-1.5 5-4 6M15 7h4v4c0 3-1.5 5-4 6"/></svg>',
   external: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
 };
 
@@ -189,6 +190,82 @@ function ttsLocale(lang) {
 }
 
 const ROW_LIMIT = 40;
+const SENTENCE_LIMIT = 25;
+
+// ---------------------------------------------------------------- example sentences
+const sentenceHtml = (parts) => parts.map(([t, bold]) => (bold ? `<b>${esc(t)}</b>` : esc(t))).join('');
+const sentenceText = (parts) => parts.map(([t]) => t).join('');
+
+/** Two-line example (source + translation); the line in the pair's "foreign" language gets a speaker. */
+function sentenceBlock(cls, ex, langs) {
+  const foreign = PAIRS[state.pair].foreign;
+  const line = (parts, lang, role) => {
+    if (!parts.length) return '';
+    const k = lang === foreign ? state.sentences.push({ text: sentenceText(parts), lang }) - 1 : -1;
+    const say = k >= 0 ? `<button class="ex-say" data-act="say-sentence" data-k="${k}" aria-label="Pronounce sentence">${ICON.speaker}</button>` : '';
+    return `<p class="${role}" lang="${lang}"><span>${sentenceHtml(parts)}</span>${say}</p>`;
+  };
+  return `<div class="${cls}">${line(ex.src, langs[0], 'ex-a')}${line(ex.dst, langs[1], 'ex-b')}</div>`;
+}
+
+function hasExamples(result) {
+  return result.sections.some((s) => s.groups.some((g) => g.items.some((it) => it.example)));
+}
+
+function examplesToggle(result) {
+  if (!hasExamples(result)) return '';
+  const on = settings.get().showExamples;
+  return `<label class="ex-toggle"><span>Example sentences</span>
+    <span class="switch"><input type="checkbox" role="switch" data-setting="showExamples" ${on ? 'checked' : ''}><span></span></span></label>`;
+}
+
+function moreSentencesBlock(result) {
+  if (result.source !== 'tureng' || state.pair !== 'entr' || !result.hasMoreSentences) return '';
+  return `<section id="sentences"><button class="btn more-sent" data-act="load-sentences">${ICON.quote} More example sentences</button></section>`;
+}
+
+function renderSentences(data, full = false) {
+  const node = $('#sentences');
+  if (!node) return;
+  state.moreSentences = data;
+  if (!data.count) {
+    node.innerHTML = '<p class="footer-src">Tureng has no more example sentences for this word.</p>';
+    return;
+  }
+  let shown = 0;
+  let html = '';
+  for (const g of data.groups) {
+    if (!full && shown >= SENTENCE_LIMIT) break;
+    let pairs = '';
+    for (const p of g.pairs) {
+      if (!full && shown >= SENTENCE_LIMIT) break;
+      pairs += sentenceBlock('sent', p, data.langs);
+      shown++;
+    }
+    const type = g.type ? `<span class="type">${esc(g.type)}</span>` : '';
+    html += `<div class="group"><h3 class="cat">${esc(g.src)} → ${esc(g.dst)} ${type}</h3>${pairs}</div>`;
+  }
+  const more = !full && data.count > shown ? `<button class="more" data-act="all-sentences">Show all (${data.count})</button>` : '';
+  node.innerHTML = `<div class="section-title"><span>Example sentences</span><span class="count">${data.count} sentences</span></div>
+    <div class="card res-card">${html}${more}</div>`;
+}
+
+async function loadSentences() {
+  const node = $('#sentences');
+  if (!node) return;
+  const q = state.q;
+  node.innerHTML = `<div class="section-title"><span>Example sentences</span></div>
+    <div class="card">${[80, 60, 75].map((w) => `<div class="sk" style="height:16px;width:${w}%;margin:14px 16px"></div>`).join('')}</div>`;
+  try {
+    const data = await moreSentences(q, state.pair);
+    if (state.q === q) renderSentences(data);
+  } catch (e) {
+    console.warn('[sentences]', e);
+    if (state.q === q) {
+      node.innerHTML = `<div class="notice">${ICON.info}<div>Could not load example sentences. <button data-act="load-sentences">Retry</button></div></div>`;
+    }
+  }
+}
 
 function renderSection(section, sIdx, full = false) {
   const [l1, l2] = section.langs;
@@ -208,7 +285,9 @@ function renderSection(section, sIdx, full = false) {
           : `<button class="w" data-act="search" data-q="${esc(t.text)}">${esc(t.text)}</button>`;
         return `<div class="cell ${cls}">${word}${t.type ? `<span class="type">${esc(t.type)}</span>` : ''}</div>`;
       };
-      rowsHtml += `<div class="row" data-act="row" data-i="${i}">${cell(item.src, 'src')}${cell(item.dst, 'dst')}<button class="say" data-act="say" data-i="${i}" aria-label="Pronounce: ${esc(speakerSide(state.rows[i]).text)}">${ICON.speaker}</button></div>`;
+      // Tureng's example pairs are always English first, then the other language — even for TR→EN rows.
+      const example = item.example ? sentenceBlock('ex', item.example, PAIRS[state.pair].langs) : '';
+      rowsHtml += `<div class="row${example ? ' has-ex' : ''}" data-act="row" data-i="${i}">${cell(item.src, 'src')}${cell(item.dst, 'dst')}<button class="say" data-act="say" data-i="${i}" aria-label="Pronounce: ${esc(speakerSide(state.rows[i]).text)}">${ICON.speaker}</button>${example}</div>`;
     }
     groupsHtml += `<div class="group">${g.category ? `<h3 class="cat">${esc(g.category)}</h3>` : ''}${rowsHtml}</div>`;
   }
@@ -274,6 +353,9 @@ function sourceFooter(result, q) {
 
 function renderResult(result) {
   state.rows = [];
+  state.sentences = [];
+  state.moreSentences = null;
+  els.view.classList.toggle('hide-ex', !settings.get().showExamples);
   const term = result.term || state.q;
   document.title = `${term} — Self Tureng`;
   const fav = favorites.has(state.q, state.pair);
@@ -285,8 +367,10 @@ function renderResult(result) {
       </div>
       <div class="pron">${pronButtons(result)}</div>
       ${infoBlock(result)}
+      ${examplesToggle(result)}
     </div>
     ${result.sections.map((s, i) => renderSection(s, i)).join('')}
+    ${moreSentencesBlock(result)}
     ${sourceFooter(result, state.q)}`;
 }
 
@@ -473,6 +557,14 @@ const actions = {
   retry: () => {
     if (state.q) lookupFresh();
   },
+  'say-sentence': (el) => {
+    const s = state.sentences[+el.dataset.k];
+    if (!s) return;
+    flash(el);
+    speak(s.text, ttsLocale(s.lang));
+  },
+  'load-sentences': () => loadSentences(),
+  'all-sentences': () => renderSentences(state.moreSentences, true),
   'del-history': (el) => { hist.remove(el.dataset.q, el.dataset.pair); renderHome(); },
   unfav: (el) => { favorites.toggle(el.dataset.q, el.dataset.pair); renderHome(); },
   'clear-history': () => {
@@ -534,6 +626,14 @@ document.addEventListener('click', (ev) => {
   if (!el) return;
   const fn = actions[el.dataset.act];
   if (fn) fn(el, ev);
+});
+
+// Settings switches rendered inside views (e.g. "Example sentences").
+document.addEventListener('change', (ev) => {
+  const input = ev.target.closest('input[data-setting]');
+  if (!input) return;
+  settings.set({ [input.dataset.setting]: input.checked });
+  if (input.dataset.setting === 'showExamples') els.view.classList.toggle('hide-ex', !input.checked);
 });
 
 // Keep the input focused while tapping a suggestion (prevents the list from vanishing on blur).
