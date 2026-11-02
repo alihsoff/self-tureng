@@ -4,13 +4,14 @@ import { turengLookup } from './tureng.js';
 import { wiktionaryLookup } from './wiktionary.js';
 import { cache, settings } from './store.js';
 
-// GitHub Pages is static-only, so there is no same-origin proxy there.
-const hasSameOriginProxy = !location.hostname.endsWith('github.io');
+// Hosts where /proxy is served by our Cloudflare Worker (or the local dev mock).
+const host = location.hostname;
+const usesSameOriginProxy = host.endsWith('workers.dev') || host.endsWith('pages.dev') || ['localhost', '127.0.0.1', '[::1]'].includes(host);
 
 export function proxyUrl() {
   const s = settings.get().proxyUrl;
   if (s !== null && s !== undefined) return s.trim(); // explicitly set (an empty string disables Tureng)
-  return DEFAULT_PROXY_URL || (hasSameOriginProxy ? SAME_ORIGIN_PROXY : '');
+  return usesSameOriginProxy ? SAME_ORIGIN_PROXY : DEFAULT_PROXY_URL;
 }
 
 /**

@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Tureng Mobile</title>
+  <title>Self Tureng</title>
   <meta name="description" content="Fast, ad-free Tureng dictionary — EN/TR/DE/FR/ES.">
 
   <!-- PWA / iOS home screen -->
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Tureng">
+  <meta name="apple-mobile-web-app-title" content="Self Tureng">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#b71c1c" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">
@@ -31,6 +31,9 @@
 <body>
   <header class="appbar" id="appbar">
     <div class="appbar-row">
+      <button class="home-btn" id="homeBtn" type="button" aria-label="Self Tureng — home">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><rect class="logo-bg" width="100" height="100" rx="24"/><path class="logo-fg" fill-rule="evenodd" d="M30 20h40a10 10 0 0 1 10 10v32a10 10 0 0 1-10 10H45l-15 12V72a10 10 0 0 1-10-10V30a10 10 0 0 1 10-10zM32 30v10h13v23h10V40h13V30z"/></svg>
+      </button>
       <button class="icon-btn" id="backBtn" type="button" aria-label="Back" hidden>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
       </button>

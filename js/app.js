@@ -24,7 +24,7 @@ const INFO_LABELS = {
 };
 
 const els = {
-  appbar: $('#appbar'), back: $('#backBtn'), form: $('#searchForm'), input: $('#q'), clear: $('#clearBtn'),
+  appbar: $('#appbar'), home: $('#homeBtn'), back: $('#backBtn'), form: $('#searchForm'), input: $('#q'), clear: $('#clearBtn'),
   settingsBtn: $('#settingsBtn'), pairs: $('#pairs'), suggest: $('#suggest'), view: $('#view'),
   scrim: $('#scrim'), sheet: $('#sheet'), toast: $('#toast'),
 };
@@ -63,6 +63,17 @@ function navigate(q, pair = state.pair, { replace = false } = {}) {
   route();
 }
 
+// Logo: from a result go to the home screen; on the home screen open the keyboard for a new search.
+function goHome() {
+  if (state.q) {
+    navigate('');
+    window.scrollTo(0, 0);
+  } else {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    els.input.focus(); // inside the tap handler, so iOS opens the keyboard
+  }
+}
+
 function goBack() {
   if ((history.state?.depth || 0) > 0) history.back();
   else navigate('', state.pair, { replace: true });
@@ -74,7 +85,8 @@ function route() {
   state.q = q;
   els.input.value = q;
   els.clear.hidden = !q;
-  els.back.hidden = !q;
+  // Back only when there is an in-app page to return to; the logo always leads home.
+  els.back.hidden = !q || !(history.state?.depth > 0);
   hideSuggest();
   closeSheet();
   if (q) search(q, pair);
@@ -110,14 +122,14 @@ function listItem({ q, pair, preview }, kind) {
 
 function renderHome() {
   state.result = null;
-  document.title = 'Tureng Mobile';
+  document.title = 'Self Tureng';
   const favs = favorites.list();
   const recent = hist.list();
   let html = '';
   if (!favs.length && !recent.length) {
     html += `<div class="hero">
       <img class="logo" src="icons/icon-192.png" alt="">
-      <h2>Tureng Mobile</h2>
+      <h2>Self Tureng</h2>
       <p>Ad-free dictionary. Type a word, listen to the<br>pronunciation, save your favorites.</p>
       <div class="chips">${['hello', 'take off', 'merhaba', 'serendipity'].map((w) => `<button class="chip" data-act="search" data-q="${w}" data-pair="entr">${w}</button>`).join('')}</div>
     </div>`;
@@ -263,7 +275,7 @@ function sourceFooter(result, q) {
 function renderResult(result) {
   state.rows = [];
   const term = result.term || state.q;
-  document.title = `${term} — Tureng Mobile`;
+  document.title = `${term} — Self Tureng`;
   const fav = favorites.has(state.q, state.pair);
   els.view.innerHTML = `${noticeBlock(result)}
     <div class="card term-card">
@@ -394,7 +406,7 @@ function openSettings() {
       <button data-act="clear-history" class="danger">Clear search history</button>
       <button data-act="clear-cache" class="danger">Clear offline cache</button>
     </div>
-    <p class="form-hint" style="text-align:center;margin-top:8px">Tureng Mobile v${APP_VERSION} · Data: tureng.com, Wiktionary</p>
+    <p class="form-hint" style="text-align:center;margin-top:8px">Self Tureng v${APP_VERSION} · Data: tureng.com, Wiktionary</p>
     <button class="cancel" data-act="close-sheet">Close</button>`);
 }
 
@@ -545,6 +557,7 @@ els.clear.addEventListener('click', () => {
   els.input.focus();
 });
 els.back.addEventListener('click', goBack);
+els.home.addEventListener('click', goHome);
 els.settingsBtn.addEventListener('click', openSettings);
 els.scrim.addEventListener('click', closeSheet);
 window.addEventListener('popstate', route);

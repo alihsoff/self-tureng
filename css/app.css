@@ -77,12 +77,26 @@ a { color: var(--accent); }
   padding: calc(var(--safe-top) + 8px) calc(var(--safe-right) + 12px) 0 calc(var(--safe-left) + 12px);
   box-shadow: 0 1px 0 rgba(0, 0, 0, .08);
 }
-.appbar-row { display: flex; align-items: center; gap: 6px; }
+.appbar-row { display: flex; align-items: center; gap: 4px; }
+/* 44px = Apple's minimum comfortable tap target */
 .icon-btn {
-  width: 40px; height: 40px; border-radius: 12px;
+  width: 44px; height: 44px; border-radius: 12px; flex: none;
   display: inline-grid; place-items: center; color: inherit;
 }
 .icon-btn:active { background: rgba(255, 255, 255, .16); }
+.home-btn {
+  width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 12px;
+  margin-left: -4px; --logo-bg: #fff; --logo-fg: #c62828;
+  transition: transform .12s ease;
+}
+.home-btn svg { width: 34px; height: 34px; stroke: none; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .18)); }
+.home-btn .logo-bg { fill: var(--logo-bg); }
+.home-btn .logo-fg { fill: var(--logo-fg); }
+.home-btn:active { transform: scale(.9); }
+:root[data-theme="dark"] .home-btn { --logo-bg: #d32f2f; --logo-fg: #fff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .home-btn { --logo-bg: #d32f2f; --logo-fg: #fff; } }
+/* Remove the double-tap-zoom delay on every control */
+button, a, input { touch-action: manipulation; }
 .search {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
   height: 42px; padding: 0 6px 0 12px; border-radius: 12px;

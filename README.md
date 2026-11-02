@@ -1,4 +1,4 @@
-# Tureng Mobile
+# Self Tureng
 
 An ad-free, mobile-first web app (PWA) for the [Tureng](https://tureng.com) dictionary. It is built to be added to the iPhone home screen and run like a native app.
 
