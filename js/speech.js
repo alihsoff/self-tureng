@@ -13,61 +13,75 @@ try {
 const AC = window.AudioContext || window.webkitAudioContext;
 const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
 
-// Playback context. iOS suspends, "interrupts" or silently freezes it when the app is backgrounded, the phone
-// is locked or after long idle periods, and resume() can then hang forever. So it is treated as disposable:
-// dropped whenever the page is hidden or it stops running, and re-created synchronously inside the next tap.
+// Playback context. iOS suspends or "interrupts" it when the app is backgrounded or the phone is locked, and
+// after that it may never resume. So it is replaced by a new one, created synchronously inside the next tap,
+// whenever it is closed/interrupted, the page has been hidden, or it failed to start or its clock froze.
 let ctx = null;
-let ctxUsable = false;
+let needsNew = false;
 let current = null;
 const buffers = new Map(); // url -> Promise<AudioBuffer>
+const diag = { contexts: 0, plays: 0, lastError: '', lastErrorAt: 0 };
 
-// Decoding uses its own offline context: it never gets interrupted, needs no gesture, and the resulting
-// AudioBuffers play in any later playback context.
-let decoder = null;
-function decodingContext() {
-  if (!decoder && OAC) {
-    try { decoder = new OAC(1, 1, 44100); } catch { decoder = null; }
-  }
-  return decoder || ctx;
+function noteError(e) {
+  diag.lastError = String(e?.message || e);
+  diag.lastErrorAt = Date.now();
+  console.warn('[audio]', e);
 }
 
-function dropContext() {
-  ctxUsable = false;
-  const old = ctx;
-  ctx = null;
-  current = null;
-  if (old) old.close().catch(() => {});
+/** For the Settings sheet: helps diagnose audio problems on a phone without dev tools. */
+export function audioDiagnostics() {
+  return {
+    supported: !!AC,
+    state: ctx ? ctx.state : 'none',
+    contexts: diag.contexts,
+    plays: diag.plays,
+    lastError: diag.lastError,
+    lastErrorAgo: diag.lastErrorAt ? Math.round((Date.now() - diag.lastErrorAt) / 1000) : null,
+  };
+}
+
+// Decoding uses its own offline context: it needs no gesture and never gets interrupted; AudioBuffers can be
+// played by any later playback context. Falls back to the playback context if offline decoding fails.
+let decoder = null;
+function offlineDecoder() {
+  if (decoder === null && OAC) {
+    try { decoder = new OAC(1, 1, 44100); } catch { decoder = false; }
+  }
+  return decoder || null;
 }
 
 function newContext() {
-  dropContext();
+  const old = ctx;
+  if (old) old.close().catch(() => {});
   const c = new AC();
-  c.onstatechange = () => {
-    if (c === ctx && (c.state === 'interrupted' || c.state === 'closed')) ctxUsable = false;
-  };
+  diag.contexts++;
   // Playing a silent buffer inside the gesture unlocks output (needed on older iOS versions).
-  const s = c.createBufferSource();
-  s.buffer = c.createBuffer(1, 1, 22050);
-  s.connect(c.destination);
-  s.start(0);
-  if (c.state !== 'running') c.resume().catch(() => {});
+  try {
+    const s = c.createBufferSource();
+    s.buffer = c.createBuffer(1, 1, 22050);
+    s.connect(c.destination);
+    s.start(0);
+  } catch { /* ignore */ }
+  c.resume?.().catch(() => {});
   ctx = c;
-  ctxUsable = true;
+  needsNew = false;
+  current = null;
   return c;
 }
 
-/** Returns a running playback context. Must be called synchronously inside a tap. */
+/** Returns the playback context, creating/resuming it. Must be called synchronously inside a tap. */
 function audioContext() {
   if (!AC) return null;
-  if (!ctx || !ctxUsable || ctx.state !== 'running') return newContext();
+  if (!ctx || needsNew || ctx.state === 'closed' || ctx.state === 'interrupted') return newContext();
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   return ctx;
 }
 
-// Backgrounding is when iOS breaks the context: release it and start fresh on the next tap.
+// Coming back from the background is when iOS leaves the context broken: build a new one on the next tap.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') dropContext();
+  if (document.visibilityState === 'hidden') needsNew = true;
 });
-window.addEventListener('pagehide', dropContext);
+window.addEventListener('pagehide', () => { needsNew = true; });
 
 function decode(ac, data) {
   // Callback form for older Safari, which doesn't return a promise.
@@ -83,9 +97,10 @@ function loadBuffer(url) {
         return r.arrayBuffer();
       })
       .then((data) => {
-        const dc = decodingContext();
-        if (!dc) throw new Error('no_webaudio');
-        return decode(dc, data);
+        const copy = data.slice(0); // decodeAudioData detaches its input
+        const dec = offlineDecoder();
+        const viaPlayback = () => (ctx ? decode(ctx, copy) : Promise.reject(new Error('decode_failed')));
+        return dec ? decode(dec, data).catch(viaPlayback) : viaPlayback();
       });
     buffers.set(url, p);
     p.catch(() => buffers.delete(url));
@@ -96,6 +111,16 @@ function loadBuffer(url) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const withTimeout = (p, ms, msg) => Promise.race([p, sleep(ms).then(() => { throw new Error(msg); })]);
 
+/** Waits for the context to actually run; iOS can take a while to spin up audio hardware. */
+async function ensureRunning(ac, ms) {
+  const until = Date.now() + ms;
+  while (ac.state !== 'running') {
+    if (Date.now() > until || ac.state === 'closed') throw new Error(`audio_not_running(${ac.state})`);
+    ac.resume().catch(() => {});
+    await sleep(60);
+  }
+}
+
 function stopAll() {
   if (current) {
     try { current.stop(); } catch { /* already stopped */ }
@@ -104,7 +129,7 @@ function stopAll() {
   if ('speechSynthesis' in window) speechSynthesis.cancel();
 }
 
-/** Fetches and decodes clips ahead of time (no gesture needed), so the first tap plays instantly. */
+/** Fetches and decodes clips ahead of time (no gesture needed), so taps play instantly. */
 export function preloadAudio(urls) {
   if (!AC || !urls.length) return;
   urls.forEach((u) => loadBuffer(u).catch(() => {}));
@@ -114,8 +139,13 @@ export async function playUrl(url) {
   const ac = audioContext(); // must stay before any await
   if (!ac) throw new Error('no_webaudio');
   stopAll();
-  const buffer = await withTimeout(loadBuffer(url), 4000, 'audio_timeout');
-  if (ac !== ctx) throw new Error('audio_context_replaced'); // page was hidden meanwhile
+  let buffer;
+  try {
+    [buffer] = await Promise.all([withTimeout(loadBuffer(url), 5000, 'audio_timeout'), ensureRunning(ac, 2000)]);
+  } catch (e) {
+    if (ac === ctx && /not_running/.test(e.message)) needsNew = true;
+    throw e;
+  }
   const source = ac.createBufferSource();
   source.buffer = buffer;
   source.connect(ac.destination);
@@ -123,14 +153,14 @@ export async function playUrl(url) {
   current = source;
   const t0 = ac.currentTime;
   source.start(0);
-  // Watchdog: a context can claim to be "running" while frozen. If its clock doesn't move, discard it
-  // (the next tap builds a new one) and let the caller fall back to speech synthesis this time.
-  await sleep(250);
-  if (ac.currentTime === t0 || ac.state !== 'running') {
-    try { source.stop(); } catch { /* ignore */ }
-    if (ac === ctx) ctxUsable = false;
-    throw new Error('audio_stalled');
-  }
+  diag.plays++;
+  // Health check that never cuts the sound: if the clock didn't move, rebuild the context on the next tap.
+  setTimeout(() => {
+    if (ac === ctx && ac.currentTime === t0) {
+      needsNew = true;
+      noteError(new Error('audio_clock_frozen'));
+    }
+  }, 1200);
 }
 
 export const ttsSupported = () => 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
@@ -167,7 +197,7 @@ export async function pronounce({ url, text, locale }) {
       await playUrl(url);
       return;
     } catch (e) {
-      console.warn('[audio]', e);
+      noteError(e);
     }
   }
   speak(text, locale);

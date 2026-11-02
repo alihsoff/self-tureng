@@ -1,6 +1,6 @@
 // Central configuration. Edit DEFAULT_PROXY_URL after deploying the worker (see README).
 
-export const APP_VERSION = '1.3.1';
+export const APP_VERSION = '1.3.2';
 
 // Proxy resolution (see api.js):
 //  1. URL saved in the in-app Settings sheet (per device), else

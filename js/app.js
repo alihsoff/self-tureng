@@ -1,7 +1,7 @@
 import { PAIRS, DEFAULT_PAIR, LANGS, ACCENTS, APP_VERSION, pairUrl } from './config.js';
 import { lookup, suggest, proxyUrl, testProxy, moreSentences, audioUrl } from './api.js';
 import { settings, history as hist, favorites, cache } from './store.js';
-import { pronounce, speak, preloadAudio } from './speech.js';
+import { pronounce, speak, preloadAudio, audioDiagnostics } from './speech.js';
 
 // ---------------------------------------------------------------- helpers
 const $ = (sel) => document.querySelector(sel);
@@ -492,7 +492,14 @@ function openSettings() {
       <button data-act="clear-cache" class="danger">Clear offline cache</button>
     </div>
     <p class="form-hint" style="text-align:center;margin-top:8px">Self Tureng v${APP_VERSION} · Data: tureng.com, Wiktionary</p>
+    <p class="form-hint" style="text-align:center;font-size:11px">${audioInfo()}</p>
     <button class="cancel" data-act="close-sheet">Close</button>`);
+}
+
+function audioInfo() {
+  const d = audioDiagnostics();
+  const err = d.lastError ? ` · last error: ${esc(d.lastError)} (${d.lastErrorAgo}s ago)` : '';
+  return `Audio: ${d.supported ? 'web audio' : 'unsupported'} · state ${d.state} · contexts ${d.contexts} · plays ${d.plays}${err}`;
 }
 
 function applyTheme(theme) {
