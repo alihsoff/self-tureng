@@ -68,9 +68,9 @@ function navigate(q, pair = state.pair, { replace = false } = {}) {
 function goHome() {
   if (state.q) {
     navigate('');
-    window.scrollTo(0, 0);
+    els.view.scrollTo(0, 0);
   } else {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    els.view.scrollTo({ top: 0, behavior: 'smooth' });
     els.input.focus(); // inside the tap handler, so iOS opens the keyboard
   }
 }
@@ -159,7 +159,7 @@ async function search(q, pair) {
   state.controller?.abort();
   const controller = (state.controller = new AbortController());
   renderLoading(q);
-  window.scrollTo(0, 0);
+  els.view.scrollTo(0, 0);
   try {
     const result = await lookup(q, pair, { signal: controller.signal });
     if (controller.signal.aborted) return;
@@ -437,16 +437,90 @@ function onInput() {
 }
 
 // ---------------------------------------------------------------- bottom sheet
+let sheetCloseTimer = null;
+function resetSheetStyles() {
+  els.sheet.classList.remove('closing', 'snap');
+  els.sheet.style.transform = '';
+  els.scrim.style.opacity = '';
+}
 function openSheet(html) {
-  els.sheet.innerHTML = `<div class="grab"></div>${html}`;
+  clearTimeout(sheetCloseTimer);
+  resetSheetStyles();
+  els.sheet.innerHTML = `<div class="grab-zone"><div class="grab"></div></div>${html}`;
+  els.sheet.scrollTop = 0;
   els.sheet.hidden = false;
   els.scrim.hidden = false;
 }
+/** Slides the sheet down (like a native iOS sheet), then hides it. */
 function closeSheet() {
-  els.sheet.hidden = true;
-  els.scrim.hidden = true;
-  els.sheet.innerHTML = '';
+  if (els.sheet.hidden || els.sheet.classList.contains('closing')) return;
+  document.activeElement?.blur?.();
+  els.sheet.classList.remove('snap');
+  els.sheet.classList.add('closing');
+  els.scrim.style.opacity = '0';
+  sheetCloseTimer = setTimeout(() => {
+    els.sheet.hidden = true;
+    els.scrim.hidden = true;
+    els.sheet.innerHTML = '';
+    resetSheetStyles();
+  }, 220);
 }
+
+// Swipe down to dismiss: drag from the handle, or from anywhere once the sheet is scrolled to the top.
+{
+  const sheet = els.sheet;
+  let originY = 0, startY = 0, lastY = 0, startT = 0, dy = 0, dragging = false, fromHandle = false;
+  sheet.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1 || sheet.classList.contains('closing')) return;
+    originY = startY = lastY = e.touches[0].clientY;
+    startT = performance.now();
+    dy = 0;
+    dragging = false;
+    fromHandle = !!e.target.closest('.grab-zone');
+  }, { passive: true });
+  sheet.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 1 || sheet.classList.contains('closing')) return;
+    const y = e.touches[0].clientY;
+    if (!dragging && (fromHandle || sheet.scrollTop <= 0) && y > lastY && y - originY > 6) { // 6px: taps stay taps
+      dragging = true;
+      startY = y; // start following the finger from here (it may have scrolled the content first)
+      startT = performance.now();
+      sheet.classList.remove('snap');
+    }
+    lastY = y;
+    if (!dragging) return;
+    dy = Math.max(0, y - startY);
+    e.preventDefault(); // the sheet moves instead of its content scrolling
+    sheet.style.transform = `translateY(${dy}px)`;
+    els.scrim.style.opacity = String(Math.max(0, 1 - dy / sheet.offsetHeight));
+  }, { passive: false });
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    const velocity = dy / Math.max(1, performance.now() - startT); // px per ms
+    if (dy > Math.min(140, sheet.offsetHeight * 0.3) || (velocity > 0.5 && dy > 24)) {
+      closeSheet();
+    } else {
+      sheet.classList.add('snap');
+      sheet.style.transform = '';
+      els.scrim.style.opacity = '';
+    }
+  };
+  sheet.addEventListener('touchend', end);
+  sheet.addEventListener('touchcancel', end);
+}
+
+// The document never moves: block drags that don't start inside a scrollable area (app bar, scrim, ...),
+// and drags on a scroll area that has nothing to scroll, so iOS can't rubber-band the whole page.
+document.addEventListener('touchmove', (e) => {
+  if (e.touches.length !== 1 || e.target.closest?.('input, textarea')) return;
+  const area = e.target.closest?.('.view, .sheet, .suggest, .pairs');
+  if (!area) return e.preventDefault();
+  if (area.classList.contains('pairs')) return; // horizontal chip scroller
+  if (area.scrollHeight <= area.clientHeight) e.preventDefault();
+}, { passive: false });
+// No pinch-zoom of the app chrome (iOS Safari ignores user-scalable=no).
+document.addEventListener('gesturestart', (e) => e.preventDefault());
 
 function openRowSheet(i) {
   const item = state.rows[i];

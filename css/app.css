@@ -59,11 +59,16 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 html, body { margin: 0; background: var(--bg); color: var(--text); }
+/* App shell: the document itself never scrolls or rubber-bands; only the content area (#view) and sheets scroll.
+   This keeps the app bar fixed in place like a native app. */
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 body {
   font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  min-height: 100dvh;
-  overscroll-behavior-y: none;
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
 }
+/* Native-feeling chrome: no text selection or long-press callout on controls */
+.appbar, button, .grab-zone { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 [hidden] { display: none !important; }
@@ -71,7 +76,7 @@ a { color: var(--accent); }
 
 /* ---------- App bar ---------- */
 .appbar {
-  position: sticky; top: 0; z-index: 20;
+  position: relative; z-index: 20; flex: none;
   background: linear-gradient(180deg, var(--brand), var(--brand-2));
   color: var(--brand-ink);
   padding: calc(var(--safe-top) + 8px) calc(var(--safe-right) + 12px) 0 calc(var(--safe-left) + 12px);
@@ -145,8 +150,11 @@ button, a, input { touch-action: manipulation; }
 
 /* ---------- Main view ---------- */
 .view {
-  padding: 12px calc(var(--safe-right) + 12px) calc(var(--safe-bottom) + 32px) calc(var(--safe-left) + 12px);
-  max-width: 760px; margin: 0 auto; outline: none;
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: none;
+  /* Full-width scroller (scrollbar at the screen edge) with content capped at 760px */
+  padding: 12px max(calc(var(--safe-right) + 12px), calc((100% - 736px) / 2)) calc(var(--safe-bottom) + 32px) max(calc(var(--safe-left) + 12px), calc((100% - 736px) / 2));
+  outline: none;
 }
 .card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); }
 .section-title {
@@ -211,7 +219,7 @@ button, a, input { touch-action: manipulation; }
   border-bottom: 1px solid var(--line);
 }
 .cat {
-  position: sticky; top: var(--appbar-h, 108px); z-index: 2;
+  position: sticky; top: -12px; z-index: 2; /* -12px: sits flush under the app bar despite the view's top padding */
   margin: 0; padding: 8px 16px; font-size: 13px; font-weight: 600; color: var(--accent);
   background: var(--surface-2); border-bottom: 1px solid var(--line);
 }
@@ -293,15 +301,19 @@ button, a, input { touch-action: manipulation; }
 @keyframes sk { to { background-position: -200% 0; } }
 
 /* ---------- Bottom sheet ---------- */
-.scrim { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .35); animation: fade .15s; }
+.scrim { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .35); animation: fade .15s; transition: opacity .22s; }
 .sheet {
   position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; max-height: 88dvh; overflow-y: auto;
+  overscroll-behavior: none; -webkit-overflow-scrolling: touch; will-change: transform;
   background: var(--bg); border-radius: 18px 18px 0 0;
   padding: 8px calc(var(--safe-right) + 16px) calc(var(--safe-bottom) + 16px) calc(var(--safe-left) + 16px);
   animation: up .22s cubic-bezier(.2, .8, .2, 1);
   max-width: 760px; margin: 0 auto;
 }
-.sheet .grab { width: 36px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 10px; }
+.sheet .grab-zone { margin: -8px -16px 0; padding: 8px 0 14px; touch-action: none; }
+.sheet .grab { width: 36px; height: 5px; border-radius: 3px; background: var(--muted); opacity: .45; margin: 0 auto; }
+.sheet.closing { transition: transform .22s cubic-bezier(.4, 0, 1, 1); transform: translateY(100%) !important; }
+.sheet.snap { transition: transform .25s cubic-bezier(.2, .8, .2, 1); }
 .sheet h3 { margin: 4px 4px 12px; font-size: 18px; }
 .sheet .actions { display: grid; gap: 1px; background: var(--line); border-radius: 12px; overflow: hidden; }
 .sheet .actions button {
