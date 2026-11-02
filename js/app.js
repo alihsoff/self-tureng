@@ -499,7 +499,7 @@ function openSettings() {
 function audioInfo() {
   const d = audioDiagnostics();
   const err = d.lastError ? ` · last error: ${esc(d.lastError)} (${d.lastErrorAgo}s ago)` : '';
-  return `Audio: ${d.supported ? 'web audio' : 'unsupported'} · state ${d.state} · contexts ${d.contexts} · plays ${d.plays}${err}`;
+  return `Audio: ${d.supported ? 'web audio' : 'unsupported'} · session ${d.session} · state ${d.state} · contexts ${d.contexts} · plays ${d.plays}${err}`;
 }
 
 function applyTheme(theme) {

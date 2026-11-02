@@ -5,13 +5,16 @@
 // Web Audio sound effects. The MP3 bytes come through our proxy because Tureng's audio host sends no CORS headers.
 import { LANGS } from './config.js';
 
-// Short "transient" sounds (Safari 17+): duck the user's music briefly instead of stopping it.
-try {
-  if (navigator.audioSession) navigator.audioSession.type = 'transient';
-} catch { /* not supported */ }
+// iOS audio session (Safari 17+). "playback" makes pronunciation audible even when the ring/silent switch is on;
+// the default for Web Audio and the "transient"/"ambient" types are muted by the silent switch.
+function setPlaybackSession() {
+  try {
+    if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback';
+  } catch { /* not supported */ }
+}
+setPlaybackSession();
 
 const AC = window.AudioContext || window.webkitAudioContext;
-const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
 
 // Playback context. iOS suspends or "interrupts" it when the app is backgrounded or the phone is locked, and
 // after that it may never resume. So it is replaced by a new one, created synchronously inside the next tap,
@@ -19,7 +22,6 @@ const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
 let ctx = null;
 let needsNew = false;
 let current = null;
-const buffers = new Map(); // url -> Promise<AudioBuffer>
 const diag = { contexts: 0, plays: 0, lastError: '', lastErrorAt: 0 };
 
 function noteError(e) {
@@ -32,22 +34,13 @@ function noteError(e) {
 export function audioDiagnostics() {
   return {
     supported: !!AC,
+    session: navigator.audioSession ? navigator.audioSession.type : 'n/a',
     state: ctx ? ctx.state : 'none',
     contexts: diag.contexts,
     plays: diag.plays,
     lastError: diag.lastError,
     lastErrorAgo: diag.lastErrorAt ? Math.round((Date.now() - diag.lastErrorAt) / 1000) : null,
   };
-}
-
-// Decoding uses its own offline context: it needs no gesture and never gets interrupted; AudioBuffers can be
-// played by any later playback context. Falls back to the playback context if offline decoding fails.
-let decoder = null;
-function offlineDecoder() {
-  if (decoder === null && OAC) {
-    try { decoder = new OAC(1, 1, 44100); } catch { decoder = false; }
-  }
-  return decoder || null;
 }
 
 function newContext() {
@@ -88,22 +81,32 @@ function decode(ac, data) {
   return new Promise((resolve, reject) => ac.decodeAudioData(data, resolve, reject));
 }
 
-function loadBuffer(url) {
-  let p = buffers.get(url);
+// Raw MP3 bytes per URL (fetched ahead of time), decoded separately for each playback context:
+// a re-created context decodes its own copy instead of reusing buffers from a dead one.
+const rawBytes = new Map(); // url -> Promise<ArrayBuffer>
+const decodedBy = new WeakMap(); // AudioContext -> Map(url -> Promise<AudioBuffer>)
+
+function fetchBytes(url) {
+  let p = rawBytes.get(url);
   if (!p) {
-    p = fetch(url)
-      .then((r) => {
-        if (!r.ok) throw new Error(`audio_http_${r.status}`);
-        return r.arrayBuffer();
-      })
-      .then((data) => {
-        const copy = data.slice(0); // decodeAudioData detaches its input
-        const dec = offlineDecoder();
-        const viaPlayback = () => (ctx ? decode(ctx, copy) : Promise.reject(new Error('decode_failed')));
-        return dec ? decode(dec, data).catch(viaPlayback) : viaPlayback();
-      });
-    buffers.set(url, p);
-    p.catch(() => buffers.delete(url));
+    p = fetch(url).then((r) => {
+      if (!r.ok) throw new Error(`audio_http_${r.status}`);
+      return r.arrayBuffer();
+    });
+    rawBytes.set(url, p);
+    p.catch(() => rawBytes.delete(url));
+  }
+  return p;
+}
+
+function loadBuffer(ac, url) {
+  let perCtx = decodedBy.get(ac);
+  if (!perCtx) decodedBy.set(ac, (perCtx = new Map()));
+  let p = perCtx.get(url);
+  if (!p) {
+    p = fetchBytes(url).then((bytes) => decode(ac, bytes.slice(0))); // decodeAudioData detaches its input
+    perCtx.set(url, p);
+    p.catch(() => perCtx.delete(url));
   }
   return p;
 }
@@ -132,16 +135,21 @@ function stopAll() {
 /** Fetches and decodes clips ahead of time (no gesture needed), so taps play instantly. */
 export function preloadAudio(urls) {
   if (!AC || !urls.length) return;
-  urls.forEach((u) => loadBuffer(u).catch(() => {}));
+  urls.forEach((u) => {
+    const p = fetchBytes(u);
+    if (ctx && !needsNew) p.then(() => loadBuffer(ctx, u)).catch(() => {});
+    else p.catch(() => {});
+  });
 }
 
 export async function playUrl(url) {
+  setPlaybackSession();
   const ac = audioContext(); // must stay before any await
   if (!ac) throw new Error('no_webaudio');
   stopAll();
   let buffer;
   try {
-    [buffer] = await Promise.all([withTimeout(loadBuffer(url), 5000, 'audio_timeout'), ensureRunning(ac, 2000)]);
+    [buffer] = await Promise.all([withTimeout(loadBuffer(ac, url), 5000, 'audio_timeout'), ensureRunning(ac, 2000)]);
   } catch (e) {
     if (ac === ctx && /not_running/.test(e.message)) needsNew = true;
     throw e;
