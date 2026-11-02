@@ -58,6 +58,16 @@ Using Cloudflare **Pages** instead also works:
 
 In that case `functions/proxy.js` serves `/proxy`.
 
+### Option C — Vercel
+
+1. Import the repository.
+2. Choose the **Other** preset with root directory `./`, and leave the build settings at their defaults.
+3. Deploy.
+
+`vercel.json` rewrites `/proxy` to the `api/proxy.js` function.
+
+> On Vercel the proxy runs on Node.js. In testing, tureng.com answered Node's requests with its 403 bot challenge, so on Vercel you will most likely get Wiktionary results. To get Tureng results on a Vercel-hosted copy, point **Settings → Tureng proxy URL** at the Cloudflare deployment: `https://self-tureng.<account>.workers.dev/proxy`.
+
 ### Option B — GitHub Pages + a separate Worker
 
 1. **Deploy the proxy:**
@@ -104,6 +114,7 @@ icons/                  App icons (regenerate with `npm run icons`)
 wrangler.jsonc          Cloudflare Workers deploy config (static assets + /proxy)
 worker/                 Proxy logic (src/proxy.js), site entry (src/site.js), standalone Worker
 functions/proxy.js      Same proxy as a Cloudflare Pages Function (/proxy)
+api/proxy.js            Same proxy as a Vercel function (vercel.json rewrites /proxy)
 dev/                    Local dev server, fixtures, icon generator
 ```
 

@@ -1,5 +1,5 @@
-// Minimal CORS proxy for Tureng Mobile, shared by the standalone Worker (worker/src/index.js)
-// and the Cloudflare Pages Function (functions/proxy.js).
+// Minimal CORS proxy for Tureng Mobile, shared by every deploy target:
+// Cloudflare Worker (worker/src/site.js, worker/src/index.js), Cloudflare Pages (functions/proxy.js), Vercel (api/proxy.js).
 // GET ?pair=entr&q=hello  ->  results column of https://tureng.com/en/turkish-english/hello as HTML.
 // It only forwards requests for the four dictionary pages; it is not an open proxy.
 
@@ -54,9 +54,10 @@ export async function handleProxy(request, env = {}, ctx = { waitUntil() {} }) {
   const q = (url.searchParams.get('q') || '').trim();
   if (!PAIRS[pair] || !q || q.length > 120) return json(400, { error: 'bad_request' }, cors.headers);
 
-  const cache = caches.default;
+  // Cloudflare has an edge cache API; elsewhere (Vercel) the CDN caches via the s-maxage header below.
+  const cache = globalThis.caches?.default;
   const cacheKey = new Request(`https://tureng-proxy.cache/${pair}/${encodeURIComponent(q.toLowerCase())}`);
-  const hit = await cache.match(cacheKey);
+  const hit = cache ? await cache.match(cacheKey) : null;
   if (hit) {
     const res = new Response(hit.body, hit);
     Object.entries(cors.headers).forEach(([k, v]) => res.headers.set(k, v));
@@ -80,9 +81,9 @@ export async function handleProxy(request, env = {}, ctx = { waitUntil() {} }) {
   }
 
   const res = new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': `public, max-age=${CACHE_SECONDS}` },
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': `public, max-age=86400, s-maxage=${CACHE_SECONDS}` },
   });
-  ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  if (cache) ctx.waitUntil(cache.put(cacheKey, res.clone()));
   Object.entries(cors.headers).forEach(([k, v]) => res.headers.set(k, v));
   res.headers.set('X-Cache', 'MISS');
   return res;

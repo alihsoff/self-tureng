@@ -1,0 +1,6 @@
+# Not needed on Vercel (worker/ stays: api/proxy.js imports worker/src/proxy.js).
+dev
+functions
+wrangler.jsonc
+.assetsignore
+.wrangler
