@@ -1,0 +1,13 @@
+{
+  "name": "tureng-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ad-free mobile web app (PWA) for the Tureng dictionary.",
+  "scripts": {
+    "dev": "node dev/server.mjs",
+    "icons": "node dev/make-icons.mjs",
+    "worker:dev": "cd worker && npx wrangler dev",
+    "worker:deploy": "cd worker && npx wrangler deploy"
+  }
+}

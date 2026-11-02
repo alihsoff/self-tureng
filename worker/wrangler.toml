@@ -1,0 +1,8 @@
+name = "tureng-proxy"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Comma-separated list of origins allowed to use the proxy, e.g. "https://<user>.github.io".
+# "*" allows any origin (fine for testing; restrict it once the app is deployed).
+ALLOWED_ORIGINS = "*"
