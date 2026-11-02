@@ -1,6 +1,7 @@
-# Not needed on Vercel (worker/ stays: api/proxy.js imports worker/src/proxy.js).
+# Vercel only serves the static app; /proxy is rewritten server-side to the Cloudflare Worker (vercel.json).
 dev
 functions
+worker
 wrangler.jsonc
 .assetsignore
 .wrangler

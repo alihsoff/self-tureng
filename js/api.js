@@ -4,9 +4,11 @@ import { turengLookup } from './tureng.js';
 import { wiktionaryLookup } from './wiktionary.js';
 import { cache, settings } from './store.js';
 
-// Hosts where /proxy is served by our Cloudflare Worker (or the local dev mock).
+// Hosts that serve /proxy on their own domain: the Cloudflare Worker itself, Vercel (server-side rewrite to
+// the Worker, so phones never contact workers.dev, which some ISPs block) and the local dev mock.
 const host = location.hostname;
-const usesSameOriginProxy = host.endsWith('workers.dev') || host.endsWith('pages.dev') || ['localhost', '127.0.0.1', '[::1]'].includes(host);
+const usesSameOriginProxy = ['workers.dev', 'pages.dev', 'vercel.app'].some((d) => host.endsWith(d)) ||
+  ['localhost', '127.0.0.1', '[::1]'].includes(host);
 
 export function proxyUrl() {
   const s = settings.get().proxyUrl;

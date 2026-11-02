@@ -1,6 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [{ "source": "/proxy", "destination": "/api/proxy" }],
+  "rewrites": [
+    {
+      "source": "/proxy",
+      "destination": "https://self-tureng.alihsoff.workers.dev/proxy"
+    }
+  ],
   "headers": [
     { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
   ]

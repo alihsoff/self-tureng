@@ -58,15 +58,15 @@ Using Cloudflare **Pages** instead also works:
 
 In that case `functions/proxy.js` serves `/proxy`.
 
-### Option C — Vercel
+### Option C — Vercel (static app; proxy via the Cloudflare Worker)
 
 1. Import the repository.
 2. Choose the **Other** preset with root directory `./`, and leave the build settings at their defaults.
 3. Deploy.
 
-`vercel.json` rewrites `/proxy` to the `api/proxy.js` function.
+`vercel.json` rewrites `/proxy` on the server side to the Cloudflare Worker from Option A. Phones only ever talk to `vercel.app`. This matters because some ISPs (reported in Turkey) block `*.workers.dev`.
 
-> On Vercel the proxy runs on Node.js. In testing, tureng.com answered Node's requests with its 403 bot challenge, so on Vercel you will most likely get Wiktionary results. To get Tureng results on a Vercel-hosted copy, point **Settings → Tureng proxy URL** at the Cloudflare deployment: `https://self-tureng.<account>.workers.dev/proxy`.
+Tureng blocks proxies that run on Node.js, so a Vercel-hosted proxy is not used.
 
 ### Option B — GitHub Pages + a separate Worker
 
@@ -114,7 +114,7 @@ icons/                  App icons (regenerate with `npm run icons`)
 wrangler.jsonc          Cloudflare Workers deploy config (static assets + /proxy)
 worker/                 Proxy logic (src/proxy.js), site entry (src/site.js), standalone Worker
 functions/proxy.js      Same proxy as a Cloudflare Pages Function (/proxy)
-api/proxy.js            Same proxy as a Vercel function (vercel.json rewrites /proxy)
+vercel.json             Vercel: rewrites /proxy to the Cloudflare Worker
 dev/                    Local dev server, fixtures, icon generator
 ```
 

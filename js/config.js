@@ -4,9 +4,8 @@ export const APP_VERSION = '1.1.0';
 
 // Proxy resolution (see api.js):
 //  1. URL saved in the in-app Settings sheet (per device), else
-//  2. on the Cloudflare deployment and localhost: SAME_ORIGIN_PROXY (Worker route / dev-server mock), else
-//  3. DEFAULT_PROXY_URL: the Cloudflare Worker. Vercel's own proxy runs on Node.js, which Tureng blocks,
-//     and GitHub Pages has no server, so those hosts use the Cloudflare proxy (it allows any origin).
+//  2. on Cloudflare, Vercel (vercel.json rewrites /proxy to the Worker) and localhost: SAME_ORIGIN_PROXY, else
+//  3. DEFAULT_PROXY_URL: the Cloudflare Worker directly (e.g. GitHub Pages, which has no server).
 export const DEFAULT_PROXY_URL = 'https://self-tureng.alihsoff.workers.dev/proxy';
 export const SAME_ORIGIN_PROXY = 'proxy';
 
