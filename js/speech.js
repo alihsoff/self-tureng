@@ -5,14 +5,43 @@
 // Web Audio sound effects. The MP3 bytes come through our proxy because Tureng's audio host sends no CORS headers.
 import { LANGS } from './config.js';
 
-// iOS audio session (Safari 17+). "playback" makes pronunciation audible even when the ring/silent switch is on;
-// the default for Web Audio and the "transient"/"ambient" types are muted by the silent switch.
-function setPlaybackSession() {
+// iOS audio session (Safari 17+):
+//  - "playback": audible with the ring/silent switch on, but iOS then treats it as media and shows a
+//    lock-screen "Now Playing" player while the audio context exists;
+//  - "transient": a short sound effect: no player, ducks music, but muted by the silent switch.
+// With playback, the context is closed shortly after each clip and the session reset, so the player goes away.
+let playInSilentMode = true;
+function setSession(type) {
   try {
-    if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback';
+    if (navigator.audioSession && navigator.audioSession.type !== type) navigator.audioSession.type = type;
   } catch { /* not supported */ }
 }
-setPlaybackSession();
+const idleSession = () => (playInSilentMode ? 'auto' : 'transient');
+setSession(idleSession());
+
+/** Settings: true = audible on silent (player may flash), false = sound-effect mode (no player, silent switch mutes). */
+export function setPlayInSilentMode(on) {
+  playInSilentMode = !!on;
+  if (!current) setSession(idleSession());
+}
+
+const RELEASE_AFTER_MS = 1500;
+let releaseTimer = null;
+
+// Close the context once clips stop: no live audio context means nothing for iOS to show on the lock screen.
+function scheduleRelease() {
+  clearTimeout(releaseTimer);
+  releaseTimer = setTimeout(() => {
+    if (current) return;
+    const old = ctx;
+    ctx = null;
+    if (old) {
+      old.close().catch(() => {});
+      diag.releases++;
+    }
+    setSession(idleSession());
+  }, RELEASE_AFTER_MS);
+}
 
 const AC = window.AudioContext || window.webkitAudioContext;
 
@@ -22,7 +51,7 @@ const AC = window.AudioContext || window.webkitAudioContext;
 let ctx = null;
 let needsNew = false;
 let current = null;
-const diag = { contexts: 0, plays: 0, lastError: '', lastErrorAt: 0 };
+const diag = { contexts: 0, plays: 0, releases: 0, lastError: '', lastErrorAt: 0 };
 
 function noteError(e) {
   diag.lastError = String(e?.message || e);
@@ -37,6 +66,7 @@ export function audioDiagnostics() {
     session: navigator.audioSession ? navigator.audioSession.type : 'n/a',
     state: ctx ? ctx.state : 'none',
     contexts: diag.contexts,
+    releases: diag.releases,
     plays: diag.plays,
     lastError: diag.lastError,
     lastErrorAgo: diag.lastErrorAt ? Math.round((Date.now() - diag.lastErrorAt) / 1000) : null,
@@ -143,7 +173,8 @@ export function preloadAudio(urls) {
 }
 
 export async function playUrl(url) {
-  setPlaybackSession();
+  clearTimeout(releaseTimer);
+  setSession(playInSilentMode ? 'playback' : 'transient');
   const ac = audioContext(); // must stay before any await
   if (!ac) throw new Error('no_webaudio');
   stopAll();
@@ -152,12 +183,16 @@ export async function playUrl(url) {
     [buffer] = await Promise.all([withTimeout(loadBuffer(ac, url), 5000, 'audio_timeout'), ensureRunning(ac, 2000)]);
   } catch (e) {
     if (ac === ctx && /not_running/.test(e.message)) needsNew = true;
+    scheduleRelease();
     throw e;
   }
   const source = ac.createBufferSource();
   source.buffer = buffer;
   source.connect(ac.destination);
-  source.onended = () => { if (current === source) current = null; };
+  source.onended = () => {
+    if (current === source) current = null;
+    scheduleRelease();
+  };
   current = source;
   const t0 = ac.currentTime;
   source.start(0);

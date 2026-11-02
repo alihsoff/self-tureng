@@ -1,7 +1,7 @@
 import { PAIRS, DEFAULT_PAIR, LANGS, ACCENTS, APP_VERSION, pairUrl } from './config.js';
 import { lookup, suggest, proxyUrl, testProxy, moreSentences, audioUrl } from './api.js';
 import { settings, history as hist, favorites, cache } from './store.js';
-import { pronounce, speak, preloadAudio, audioDiagnostics } from './speech.js';
+import { pronounce, speak, preloadAudio, audioDiagnostics, setPlayInSilentMode } from './speech.js';
 
 // ---------------------------------------------------------------- helpers
 const $ = (sel) => document.querySelector(sel);
@@ -487,6 +487,11 @@ function openSettings() {
       <div class="form-row"><span class="lbl">English accent</span>${seg('accent', [['en-US', 'US'], ['en-GB', 'UK'], ['en-AU', 'AU']], s.accent)}</div>
       <div class="form-row"><span class="lbl">Theme</span>${seg('theme', [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], s.theme)}</div>
     </div>
+    <div class="form-group">
+      <label class="form-row" style="cursor:pointer"><span class="lbl">Play when iPhone is on silent</span>
+        <span class="switch"><input type="checkbox" role="switch" data-setting="silentPlayback" ${s.silentPlayback ? 'checked' : ''}><span></span></span></label>
+    </div>
+    <p class="form-hint">On: pronunciation is audible in silent mode; iOS may briefly show a player on the lock screen. Off: no player, but the silent switch mutes recorded pronunciation.</p>
     <div class="form-group actions" style="display:grid">
       <button data-act="clear-history" class="danger">Clear search history</button>
       <button data-act="clear-cache" class="danger">Clear offline cache</button>
@@ -499,7 +504,7 @@ function openSettings() {
 function audioInfo() {
   const d = audioDiagnostics();
   const err = d.lastError ? ` · last error: ${esc(d.lastError)} (${d.lastErrorAgo}s ago)` : '';
-  return `Audio: ${d.supported ? 'web audio' : 'unsupported'} · session ${d.session} · state ${d.state} · contexts ${d.contexts} · plays ${d.plays}${err}`;
+  return `Audio: ${d.supported ? 'web audio' : 'unsupported'} · session ${d.session} · state ${d.state} · contexts ${d.contexts} · plays ${d.plays} · released ${d.releases}${err}`;
 }
 
 function applyTheme(theme) {
@@ -642,6 +647,7 @@ document.addEventListener('change', (ev) => {
   if (!input) return;
   settings.set({ [input.dataset.setting]: input.checked });
   if (input.dataset.setting === 'showExamples') els.view.classList.toggle('hide-ex', !input.checked);
+  if (input.dataset.setting === 'silentPlayback') setPlayInSilentMode(input.checked);
 });
 
 // Keep the input focused while tapping a suggestion (prevents the list from vanishing on blur).
@@ -680,6 +686,7 @@ setBarHeight();
 
 // ---------------------------------------------------------------- boot
 applyTheme(settings.get().theme);
+setPlayInSilentMode(settings.get().silentPlayback);
 renderPairs();
 {
   // Support ?q=word (&pair=entr) links, e.g. from iOS Shortcuts.

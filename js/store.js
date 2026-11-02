@@ -23,7 +23,7 @@ function write(key, value) {
 }
 
 // ---- settings
-const DEFAULT_SETTINGS = { proxyUrl: null, pair: 'entr', accent: 'en-US', theme: 'auto', showExamples: true };
+const DEFAULT_SETTINGS = { proxyUrl: null, pair: 'entr', accent: 'en-US', theme: 'auto', showExamples: true, silentPlayback: true };
 export const settings = {
   get() {
     return { ...DEFAULT_SETTINGS, ...read(KEYS.settings, {}) };
